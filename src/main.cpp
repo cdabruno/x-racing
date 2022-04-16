@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 // Headers abaixo são específicos de C++
 #include <map>
@@ -121,6 +122,9 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
+// Colisoes
+bool collisionCubeCube(glm::vec4 bb1min, glm::vec4 bb1max, glm::vec4 bb2min, glm::vec4 bb2max);
+
 // Definimos uma estrutura que armazenará dados necessários para renderizar
 // cada objeto da cena virtual.
 struct SceneObject
@@ -167,6 +171,15 @@ float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
 float g_CameraPhi = 0.0f;   // Ângulo em relação ao eixo Y
 float g_CameraDistance = 3.5f; // Distância da câmera para a origem
 
+float g_oldCameraTheta = g_CameraTheta;
+
+// Posicao da moto
+glm::vec4 posMoto = glm::vec4(1.0f,15.0f,0.0f, 1.0f);
+glm::vec3 velMoto = glm::vec3(0.0f,0.0f,1.0f);
+glm::vec3 rotationAnglesMoto = glm::vec3(0.0f,0.0f,0.0f);
+float gravity = 0.001f;
+float oldTimeGravity = (float)glfwGetTime();
+
 // Variáveis que controlam rotação do antebraço
 float g_ForearmAngleZ = 0.0f;
 float g_ForearmAngleX = 0.0f;
@@ -181,6 +194,13 @@ bool g_UsePerspectiveProjection = true;
 // Variável que controla se o texto informativo será mostrado na tela.
 bool g_ShowInfoText = true;
 
+// Teclas sendo pressionadas
+bool g_W_state = false;
+bool g_A_state = false;
+bool g_S_state = false;
+bool g_D_state = false;
+bool g_Space_state = false;
+
 // Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
 GLuint vertex_shader_id;
 GLuint fragment_shader_id;
@@ -191,6 +211,10 @@ GLint projection_uniform;
 GLint object_id_uniform;
 GLint bbox_min_uniform;
 GLint bbox_max_uniform;
+
+// Variaveis da camera
+glm::vec4 g_move = glm::vec4(0.0f,0.0f,0.0f,0.0f); // vetor que representa o deslocamento da posicao inicial
+glm::vec4 camera_position_c; // Ponto "c", centro da câmera
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
@@ -224,7 +248,7 @@ int main(int argc, char* argv[])
     // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
     // de pixels, e com título "INF01047 ...".
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "INF01047 - Seu Cartao - Seu Nome", NULL, NULL);
+    window = glfwCreateWindow(800, 600, "X-RACING", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -269,21 +293,26 @@ int main(int argc, char* argv[])
     LoadShadersFromFiles();
 
     // Carregamos duas imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // TextureImage0
-    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // TextureImage1
+    LoadTextureImage("../../data/pista.jpg");      // TextureImage0
+    LoadTextureImage("../../data/moto-textura.jpg"); // TextureImage1
+    LoadTextureImage("../../data/parede.jpg"); // TextureImage2
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel spheremodel("../../data/sphere.obj");
     ComputeNormals(&spheremodel);
     BuildTrianglesAndAddToVirtualScene(&spheremodel);
 
-    ObjModel bunnymodel("../../data/bunny.obj");
+    ObjModel bunnymodel("../../data/moto.obj");
     ComputeNormals(&bunnymodel);
     BuildTrianglesAndAddToVirtualScene(&bunnymodel);
 
     ObjModel planemodel("../../data/plane.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
+
+    ObjModel cubemodel("../../data/cube.obj");
+    ComputeNormals(&cubemodel);
+    BuildTrianglesAndAddToVirtualScene(&cubemodel);
 
     if ( argc > 1 )
     {
@@ -302,11 +331,28 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
+    // cursor invisivel
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    float r_init = g_CameraDistance;
+    float y_init = r_init*sin(g_CameraPhi);
+    float z_init = r_init*cos(g_CameraPhi)*cos(g_CameraTheta);
+    float x_init = r_init*cos(g_CameraPhi)*sin(g_CameraTheta);
+
     // Variáveis auxiliares utilizadas para chamada à função
     // TextRendering_ShowModelViewProjection(), armazenando matrizes 4x4.
     glm::mat4 the_projection;
     glm::mat4 the_model;
     glm::mat4 the_view;
+
+    // Variaveis da camera
+    glm::vec4 camera_lookat_l;  // Ponto "l", para onde a câmera (look-at) estará sempre olhando
+    glm::vec4 camera_view_vector; // Vetor "view", sentido para onde a câmera está virada
+    glm::vec4 camera_up_vector; // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+    glm::vec4 old_move = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // vetor que representa o deslocamento da posicao inicial
+
+    float speed = 0.0008f; // Velocidade da câmera
+    float oldTime = (float)glfwGetTime();
 
     // Ficamos em loop, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
@@ -338,12 +384,68 @@ int main(int argc, char* argv[])
         float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
         float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
 
-        // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
-        // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
-        glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
-        glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
-        glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+        glm::vec4 camera_view_vector_proj = glm::vec4(-x,-y_init,-z,0.0f);
+        glm::vec4 w_camera = -camera_view_vector_proj;
+        glm::vec4 u_camera = crossproduct(camera_up_vector, w_camera);
+        w_camera = w_camera / norm(w_camera);
+        u_camera = u_camera / norm(u_camera);
+
+        // camera livre
+        camera_position_c  = glm::vec4(posMoto.x,posMoto.y + 0.8f,posMoto.z + 0.25f, 1.0f) + g_move; // Ponto "c", centro da câmera
+        camera_view_vector = glm::vec4(-x, -y, -z, 0.0f); // Vetor "view", sentido para onde a câmera está virada
+        camera_up_vector   = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+
+        bool colidiu = false;
+
+        // Atualiza delta de tempo
+        float currentCameraTime = (float)glfwGetTime();
+        float deltaTCamera = currentCameraTime - oldTime;
+
+        // W
+        if (g_W_state){
+            g_move += camera_view_vector * speed * deltaTCamera;
+            g_move.y = 0;
+        }
+        // // A
+        // if (g_A_state){
+        //     g_move += -u_camera * speed * deltaTCamera;
+        // }
+        // S
+        if (g_S_state)
+        {
+            g_move += -camera_view_vector * speed * deltaTCamera;
+            g_move.y = 0;
+
+        }
+        // // D
+        // if (g_D_state){
+        //     g_move += +u_camera * speed * deltaTCamera;
+        // }
+        // Space
+        if (g_Space_state){
+            posMoto.y += speed * deltaTCamera;
+            std::cout << g_move.x << "," << g_move.y << "," << g_move.z << std::endl;
+        }
+
+        // Gravidade
+        float currentTimeGravity = (float)glfwGetTime();
+        float deltaTGravity = currentTimeGravity - oldTimeGravity;
+       
+        if(posMoto.y > -1.1f){
+            velMoto.y = velMoto.y - (gravity * deltaTGravity); 
+            posMoto.y = glm::max(posMoto.y + velMoto.y, -1.1f);
+        }
+        else{
+            oldTimeGravity = currentTimeGravity;
+        }
+
+        // Atualiza posicao da moto
+        posMoto  = glm::vec4(posMoto.x, posMoto.y, posMoto.z, 1.0f) + g_move; // Ponto "c", centro da câmera
+
+        // camera livre
+        camera_position_c  = glm::vec4(posMoto.x, posMoto.y + 0.8f, posMoto.z + 0.25f, 1.0f); // Ponto "c", centro da câmera
+        camera_view_vector = glm::vec4(-x,-y,-z,0.0f); // Vetor "view", sentido para onde a câmera está virada
+        camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
 
         // Computamos a matriz "View" utilizando os parâmetros da câmera para
         // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
@@ -355,7 +457,7 @@ int main(int argc, char* argv[])
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -10.0f; // Posição do "far plane"
+        float farplane  = -90.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
@@ -387,30 +489,132 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
         #define SPHERE 0
-        #define BUNNY  1
+        #define MOTO  1
         #define PLANE  2
+        #define WALL 3
 
         // Desenhamos o modelo da esfera
-        model = Matrix_Translate(-1.0f,0.0f,0.0f)
-              * Matrix_Rotate_Z(0.6f)
-              * Matrix_Rotate_X(0.2f)
-              * Matrix_Rotate_Y(g_AngleY + (float)glfwGetTime() * 0.1f);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, SPHERE);
-        DrawVirtualObject("sphere");
+        // model = Matrix_Translate(-1.0f,0.0f,0.0f)
+        //       * Matrix_Rotate_Z(0.6f)
+        //       * Matrix_Rotate_X(0.2f)
+        //       * Matrix_Rotate_Y(g_AngleY + (float)glfwGetTime() * 0.1f);
+        // glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        // glUniform1i(object_id_uniform, SPHERE);
+        // DrawVirtualObject("sphere");
 
-        // Desenhamos o modelo do coelho
-        model = Matrix_Translate(1.0f,0.0f,0.0f)
-              * Matrix_Rotate_X(g_AngleX + (float)glfwGetTime() * 0.1f);
+        // Desenhamos o modelo da moto
+        model = Matrix_Translate(posMoto.x,posMoto.y,posMoto.z)
+                * Matrix_Rotate_X(0.0f)
+                * Matrix_Rotate_Y(g_CameraTheta)
+                * Matrix_Rotate_Z(0.0f)
+                * Matrix_Scale(0.5f, 0.5f, 0.5f);
+        glm::mat4 model_moto = model;
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, BUNNY);
-        DrawVirtualObject("bunny");
+        glUniform1i(object_id_uniform, MOTO);
+        DrawVirtualObject("moto");
 
         // Desenhamos o plano do chão
-        model = Matrix_Translate(0.0f,-1.1f,0.0f);
+        model = Matrix_Translate(0.0f,-1.1f,0.0f)
+              * Matrix_Scale(20.0f, 5.0f, 20.0f);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, PLANE);
         DrawVirtualObject("plane");
+
+        // Desenhamos as paredes
+        model = Matrix_Translate(5.0f,-1.0f,20.0f)
+              * Matrix_Scale(25.0f, 2.0f, 2.0f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, WALL);
+        DrawVirtualObject("cube");
+
+        colidiu = colidiu || collisionCubeCube(model_moto * glm::vec4(g_VirtualScene["moto"].bbox_min.x,
+                                                g_VirtualScene["moto"].bbox_min.y,
+                                                g_VirtualScene["moto"].bbox_min.z, 1.0f),
+                                                model_moto * glm::vec4(g_VirtualScene["moto"].bbox_max.x,
+                                                g_VirtualScene["moto"].bbox_max.y,
+                                                g_VirtualScene["moto"].bbox_max.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_min.x,
+                                                g_VirtualScene["cube"].bbox_min.y,
+                                                g_VirtualScene["cube"].bbox_min.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_max.x,
+                                                g_VirtualScene["cube"].bbox_max.y,
+                                                g_VirtualScene["cube"].bbox_max.z,
+                                                1.0f));
+
+        // Desenhamos as paredes
+        model = Matrix_Translate(5.0f,-1.0f,-20.0f)
+              * Matrix_Scale(25.0f, 2.0f, 2.0f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, WALL);
+        DrawVirtualObject("cube");
+
+        colidiu = colidiu || collisionCubeCube(model_moto * glm::vec4(g_VirtualScene["moto"].bbox_min.x,
+                                                g_VirtualScene["moto"].bbox_min.y,
+                                                g_VirtualScene["moto"].bbox_min.z, 1.0f),
+                                                model_moto * glm::vec4(g_VirtualScene["moto"].bbox_max.x,
+                                                g_VirtualScene["moto"].bbox_max.y,
+                                                g_VirtualScene["moto"].bbox_max.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_min.x,
+                                                g_VirtualScene["cube"].bbox_min.y,
+                                                g_VirtualScene["cube"].bbox_min.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_max.x,
+                                                g_VirtualScene["cube"].bbox_max.y,
+                                                g_VirtualScene["cube"].bbox_max.z,
+                                                1.0f));
+
+        // Desenhamos as paredes
+        model = Matrix_Translate(21.7f,-1.0f,5.0f)
+              * Matrix_Rotate_Y(M_PI/2)
+              * Matrix_Scale(25.0f, 2.0f, 2.0f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, WALL);
+        DrawVirtualObject("cube");
+
+        colidiu = colidiu || collisionCubeCube(model_moto * glm::vec4(g_VirtualScene["moto"].bbox_min.x,
+                                                g_VirtualScene["moto"].bbox_min.y,
+                                                g_VirtualScene["moto"].bbox_min.z, 1.0f),
+                                                model_moto * glm::vec4(g_VirtualScene["moto"].bbox_max.x,
+                                                g_VirtualScene["moto"].bbox_max.y,
+                                                g_VirtualScene["moto"].bbox_max.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_min.x,
+                                                g_VirtualScene["cube"].bbox_min.y,
+                                                g_VirtualScene["cube"].bbox_min.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_max.x,
+                                                g_VirtualScene["cube"].bbox_max.y,
+                                                g_VirtualScene["cube"].bbox_max.z,
+                                                1.0f));
+
+        // Desenhamos as paredes
+        model = Matrix_Translate(-21.7f,-1.0f,5.0f)
+              * Matrix_Rotate_Y(M_PI/2)
+              * Matrix_Scale(25.0f, 2.0f, 2.0f);
+        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+        glUniform1i(object_id_uniform, WALL);
+        DrawVirtualObject("cube");
+
+
+
+        colidiu = colidiu || collisionCubeCube(model_moto * glm::vec4(g_VirtualScene["moto"].bbox_min.x,
+                                                g_VirtualScene["moto"].bbox_min.y,
+                                                g_VirtualScene["moto"].bbox_min.z, 1.0f),
+                                                model_moto * glm::vec4(g_VirtualScene["moto"].bbox_max.x,
+                                                g_VirtualScene["moto"].bbox_max.y,
+                                                g_VirtualScene["moto"].bbox_max.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_min.x,
+                                                g_VirtualScene["cube"].bbox_min.y,
+                                                g_VirtualScene["cube"].bbox_min.z, 1.0f),
+                                                model * glm::vec4(g_VirtualScene["cube"].bbox_max.x,
+                                                g_VirtualScene["cube"].bbox_max.y,
+                                                g_VirtualScene["cube"].bbox_max.z,
+                                                1.0f));
+        if (colidiu){
+            deltaTCamera = 0;
+            velMoto = glm::vec3(0.0f, 0.0f, 0.0f);
+            g_move = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+            posMoto = old_move;
+        }else{
+            old_move = posMoto;
+        }
 
         // Pegamos um vértice com coordenadas de modelo (0.5, 0.5, 0.5, 1) e o
         // passamos por todos os sistemas de coordenadas armazenados nas
@@ -1155,6 +1359,32 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 
     float delta = 3.141592 / 16; // 22.5 graus, em radianos.
 
+    // W
+    if (key == GLFW_KEY_W)
+    {
+        g_W_state = (action == GLFW_PRESS)? true: ((action == GLFW_RELEASE)? false: g_W_state);
+    }
+    // A
+    if (key == GLFW_KEY_A)
+    {
+        g_A_state = (action == GLFW_PRESS)? true: ((action == GLFW_RELEASE)? false: g_A_state);
+    }
+    // S
+    if (key == GLFW_KEY_S)
+    {
+        g_S_state = (action == GLFW_PRESS)? true: ((action == GLFW_RELEASE)? false: g_S_state);
+    }
+    // D
+    if (key == GLFW_KEY_D)
+    {
+        g_D_state = (action == GLFW_PRESS)? true: ((action == GLFW_RELEASE)? false: g_D_state);
+    }
+    // D
+    if (key == GLFW_KEY_SPACE)
+    {
+        g_Space_state = (action == GLFW_PRESS)? true: ((action == GLFW_RELEASE)? false: g_Space_state);
+    }
+
     if (key == GLFW_KEY_X && action == GLFW_PRESS)
     {
         g_AngleX += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
@@ -1213,6 +1443,7 @@ void ErrorCallback(int error, const char* description)
 {
     fprintf(stderr, "ERROR: GLFW: %s\n", description);
 }
+
 
 // Esta função recebe um vértice com coordenadas de modelo p_model e passa o
 // mesmo por todos os sistemas de coordenadas armazenados nas matrizes model,
@@ -1514,3 +1745,13 @@ void PrintObjModelInfo(ObjModel* model)
 // set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null
 // vim: set spell spelllang=pt_br :
 
+// COLISAO CUBO-CUBO
+bool collisionCubeCube(glm::vec4 bb1min, glm::vec4 bb1max, glm::vec4 bb2min, glm::vec4 bb2max) {
+    for(int i = 0; i<3; i++) {
+        if ((bb1min[i] < bb2min[i] &&  bb1min[i] < bb2max[i] && bb1max[i] < bb2min[i] &&  bb1max[i] < bb2max[i])
+            ||
+            (bb2min[i] < bb1min[i] &&  bb2min[i] < bb1max[i] && bb2max[i] < bb1min[i] &&  bb2max[i] < bb1max[i]))
+            return false;
+    }
+    return true;
+}

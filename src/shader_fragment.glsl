@@ -20,8 +20,9 @@ uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
 #define SPHERE 0
-#define BUNNY  1
+#define MOTO  1
 #define PLANE  2
+#define WALL  3
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -60,14 +61,20 @@ void main()
 
     // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
     vec4 l0 = normalize(vec4(1.0,1.0,0.0,0.0));
-    vec4 l1 = normalize(vec4(-1.0,-1.0,0.0,0.0));
 
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
 
+    // Vetor que define o sentido da reflexão especular ideal.
+    vec4 r = -l0 + 2*n*(dot(n,l0)); // PREENCHA AQUI o vetor de reflexão especular ideal
+
+    // half-vector
+    vec4 h = normalize(v+l0);
+
     // Coordenadas de textura U e V
     float U = 0.0;
     float V = 0.0;
+    
 
     if ( object_id == SPHERE )
     {
@@ -96,7 +103,7 @@ void main()
 
 
     }
-    else if ( object_id == BUNNY )
+    else if ( object_id == MOTO )
     {
         // PREENCHA AQUI as coordenadas de textura do coelho, computadas com
         // projeção planar XY em COORDENADAS DO MODELO. Utilize como referência
@@ -118,23 +125,60 @@ void main()
 
         U = (position_model.x - minx)/(maxx - minx);
         V = (position_model.y - miny)/(maxy - miny);
+
+        vec3 Kd0 = texture(TextureImage1, vec2(U,V)).rgb;
+   
+
+        // Equação de Iluminação
+        float lambert = max(0,dot(n,l0));
+       
+
+        color.rgb = Kd0 * (lambert + 0.01);
+
+    }else if ( object_id == WALL ){
+
+        l0 = normalize(camera_position - p);
+
+        float minx = bbox_min.x;
+        float maxx = bbox_max.x;
+
+        float miny = bbox_min.y;
+        float maxy = bbox_max.y;
+
+        float minz = bbox_min.z;
+        float maxz = bbox_max.z;
+
+        // Coordenadas de textura do plano, obtidas do arquivo OBJ.
+        U = texcoords.x;
+        V = texcoords.y;
+
+        vec3 Kd0 = texture(TextureImage2, vec2(U,V)).rgb;
+   
+
+        // Equação de Iluminação
+        float lambert = max(0,dot(n,l0));
+       
+
+        color.rgb = Kd0 * (lambert + 0.01);
     }
     else if ( object_id == PLANE )
     {
         // Coordenadas de textura do plano, obtidas do arquivo OBJ.
         U = texcoords.x;
         V = texcoords.y;
+
+        vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+   
+
+        // Equação de Iluminação
+        float lambert = max(0,dot(n,l0));
+       
+
+        color.rgb = Kd0 * (lambert + 0.01);
     }
 
     // Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-    vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
-    vec3 Kd1 = texture(TextureImage1, vec2(U,V)).rgb;
-
-    // Equação de Iluminação
-    float lambert0 = max(0,dot(n,l0));
-    float lambert1 = max(0,dot(n,l1));
-
-    color.rgb = Kd0 * (lambert0 + 0.01) + Kd1 * (lambert1 + 0.01);
+    
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
