@@ -351,7 +351,7 @@ int main(int argc, char* argv[])
     glm::vec4 camera_up_vector; // Vetor "up" fixado para apontar para o "céu" (eito Y global)
     glm::vec4 old_move = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // vetor que representa o deslocamento da posicao inicial
 
-    float speed = 0.0008f; // Velocidade da câmera
+    float speed = 0.002f; // Velocidade da câmera
     float oldTime = (float)glfwGetTime();
 
     // Ficamos em loop, renderizando, até que o usuário feche a janela
@@ -384,6 +384,8 @@ int main(int argc, char* argv[])
         float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
         float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
 
+
+        glm::vec4 old_camera_view_vector = camera_view_vector;
         glm::vec4 camera_view_vector_proj = glm::vec4(-x,-y_init,-z,0.0f);
         glm::vec4 w_camera = -camera_view_vector_proj;
         glm::vec4 u_camera = crossproduct(camera_up_vector, w_camera);
@@ -403,8 +405,27 @@ int main(int argc, char* argv[])
 
         // W
         if (g_W_state){
-            g_move += camera_view_vector * speed * deltaTCamera;
+            g_move = camera_view_vector * speed * deltaTCamera;
+            if(g_move.x > 0){
+                g_move.x = glm::min(g_move.x, 0.06f);
+            }else{
+                g_move.x = glm::max(g_move.x, -0.06f);
+            }
+            if(g_move.y > 0){
+                g_move.y = glm::min(g_move.y, 0.06f);
+            }else{
+                g_move.y = glm::max(g_move.y, -0.06f);
+            }
+            if(g_move.z > 0){
+                g_move.z = glm::min(g_move.z, 0.06f);
+            }else{
+                g_move.z = glm::max(g_move.z, -0.06f);
+            }
+            
             g_move.y = 0;
+            std::cout << "G" << g_move.x << "," << g_move.y << "," << g_move.z << std::endl;
+            std::cout << "W" << w_camera.x << "," << w_camera.y << "," << w_camera.z << std::endl;
+            std::cout << "D" << deltaTCamera << std::endl;
         }
         // // A
         // if (g_A_state){
@@ -413,7 +434,7 @@ int main(int argc, char* argv[])
         // S
         if (g_S_state)
         {
-            g_move += -camera_view_vector * speed * deltaTCamera;
+            g_move = -camera_view_vector * speed * deltaTCamera;
             g_move.y = 0;
 
         }
@@ -440,10 +461,10 @@ int main(int argc, char* argv[])
         }
 
         // Atualiza posicao da moto
-        posMoto  = glm::vec4(posMoto.x, posMoto.y, posMoto.z, 1.0f) + g_move; // Ponto "c", centro da câmera
+        posMoto  = posMoto + g_move; // Ponto "c", centro da câmera
 
         // camera livre
-        camera_position_c  = glm::vec4(posMoto.x, posMoto.y + 0.8f, posMoto.z + 0.25f, 1.0f); // Ponto "c", centro da câmera
+        camera_position_c  = glm::vec4(posMoto.x - 0.05f, posMoto.y + 0.3f, posMoto.z + 0.15f, 1.0f); // Ponto "c", centro da câmera
         camera_view_vector = glm::vec4(-x,-y,-z,0.0f); // Vetor "view", sentido para onde a câmera está virada
         camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
 
@@ -502,12 +523,18 @@ int main(int argc, char* argv[])
         // glUniform1i(object_id_uniform, SPHERE);
         // DrawVirtualObject("sphere");
 
+        glm::vec4 cross = crossproduct(g_move, camera_view_vector);
+        float angle;
+        if (glm::dot(g_move, cross) < 0) { // Or > 0
+            angle = -angle;
+        }
+
         // Desenhamos o modelo da moto
         model = Matrix_Translate(posMoto.x,posMoto.y,posMoto.z)
                 * Matrix_Rotate_X(0.0f)
                 * Matrix_Rotate_Y(g_CameraTheta)
                 * Matrix_Rotate_Z(0.0f)
-                * Matrix_Scale(0.5f, 0.5f, 0.5f);
+                * Matrix_Scale(0.2f, 0.2f, 0.2f);
         glm::mat4 model_moto = model;
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, MOTO);
@@ -609,9 +636,10 @@ int main(int argc, char* argv[])
                                                 1.0f));
         if (colidiu){
             deltaTCamera = 0;
+            posMoto = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);;
             velMoto = glm::vec3(0.0f, 0.0f, 0.0f);
             g_move = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
-            posMoto = old_move;
+            oldTime = (float)glfwGetTime();
         }else{
             old_move = posMoto;
         }
