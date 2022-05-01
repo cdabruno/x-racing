@@ -7,6 +7,9 @@
 in vec4 position_world;
 in vec4 normal;
 
+// Cor para interpolacao de Gouraud 
+in vec4 cor_v;
+
 // Posição do vértice atual no sistema de coordenadas local do modelo.
 in vec4 position_model;
 
@@ -23,6 +26,7 @@ uniform mat4 projection;
 #define MOTO  1
 #define PLANE  2
 #define WALL  3
+#define MOTO1  4
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -75,7 +79,9 @@ void main()
     float U = 0.0;
     float V = 0.0;
     
-
+    if ( object_id == MOTO1 ){
+        color = vec4(cor_v.x, cor_v.y, cor_v.z, 1);
+    }
     if ( object_id == SPHERE )
     {
         // PREENCHA AQUI as coordenadas de textura da esfera, computadas com
@@ -91,15 +97,34 @@ void main()
         //   constante M_PI
         //   variável position_model
 
-        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
+        U = texcoords.x;
+        V = texcoords.y;
 
-        vec4 p_l = bbox_center + (position_model - bbox_center)/length(position_model - bbox_center);
-        vec4 p_v = p_l - bbox_center;
-        float theta = atan(p_v.x, p_v.z);
-        float phi = asin(p_v.y);
+        // Parâmetros que definem as propriedades espectrais da superfície
+        vec3 Kd = vec3(0.2,0.1,0.03); // Refletância difusa
+        vec3 Ks = vec3(0.2,0.2,0.2); // Refletância especular
+        vec3 Ka = vec3(0.4,0.1,0.03); // Refletância ambiente
+        float q = 16.0; // Expoente especular para o modelo de iluminação de Phong
 
-        U = (theta + M_PI)/(2*M_PI);
-        V = (phi + M_PI_2)/M_PI;
+        // Espectro da fonte de iluminação
+        vec3 I = vec3(1.0,1.0,1.0); // PREENCHA AQUI o espectro da fonte de luz
+
+        // Espectro da luz ambiente
+        vec3 Ia = vec3(0.2,0.2,0.2); // PREENCHA AQUI o espectro da luz ambiente
+
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l0)); // PREENCHA AQUI o termo difuso de Lambert
+
+        // Termo ambiente
+        vec3 ambient_term = Ka*Ia; // PREENCHA AQUI o termo ambiente
+
+        // Termo especular utilizando o modelo de iluminação de blinn-Phong
+        vec3 phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // PREENCHA AQUI o termo especular de Phong
+        
+        // BLINN-PHONG
+        // Cor final do fragmento calculada com uma combinação dos termos difuso,
+        // especular, e ambiente. Veja slide 129 do documento Aula_17_e_18_Modelos_de_Iluminacao.pdf.
+        color.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;
 
 
     }
@@ -113,6 +138,7 @@ void main()
         // tanto, veja por exemplo o mapeamento da variável 'p_v' utilizando
         // 'h' no slides 158-160 do documento Aula_20_Mapeamento_de_Texturas.pdf.
         // Veja também a Questão 4 do Questionário 4 no Moodle.
+        //color.rgb = vec3(cor_v.x, cor_v.y, cor_v.z);
 
         float minx = bbox_min.x;
         float maxx = bbox_max.x;
