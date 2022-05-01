@@ -1,45 +1,49 @@
 #version 330 core
 
-// Atributos de vértice recebidos como entrada ("in") pelo Vertex Shader.
-// Veja a função BuildTrianglesAndAddToVirtualScene() em "main.cpp".
+// Atributos de vï¿½rtice recebidos como entrada ("in") pelo Vertex Shader.
+// Veja a funï¿½ï¿½o BuildTrianglesAndAddToVirtualScene() em "main.cpp".
 layout (location = 0) in vec4 model_coefficients;
 layout (location = 1) in vec4 normal_coefficients;
 layout (location = 2) in vec2 texture_coefficients;
 
-// Matrizes computadas no código C++ e enviadas para a GPU
+// Matrizes computadas no cï¿½digo C++ e enviadas para a GPU
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-// Atributos de vértice que serão gerados como saída ("out") pelo Vertex Shader.
-// ** Estes serão interpolados pelo rasterizador! ** gerando, assim, valores
-// para cada fragmento, os quais serão recebidos como entrada pelo Fragment
+#define MOTO1 4
+uniform int object_id;
+
+// Atributos de vï¿½rtice que serï¿½o gerados como saï¿½da ("out") pelo Vertex Shader.
+// ** Estes serï¿½o interpolados pelo rasterizador! ** gerando, assim, valores
+// para cada fragmento, os quais serï¿½o recebidos como entrada pelo Fragment
 // Shader. Veja o arquivo "shader_fragment.glsl".
 out vec4 position_world;
 out vec4 position_model;
 out vec4 normal;
 out vec2 texcoords;
+out vec4 cor_v;
 
 void main()
 {
-    // A variável gl_Position define a posição final de cada vértice
+    // A variï¿½vel gl_Position define a posiï¿½ï¿½o final de cada vï¿½rtice
     // OBRIGATORIAMENTE em "normalized device coordinates" (NDC), onde cada
-    // coeficiente estará entre -1 e 1 após divisão por w.
+    // coeficiente estarï¿½ entre -1 e 1 apï¿½s divisï¿½o por w.
     // Veja {+NDC2+}.
     //
-    // O código em "main.cpp" define os vértices dos modelos em coordenadas
+    // O cï¿½digo em "main.cpp" define os vï¿½rtices dos modelos em coordenadas
     // locais de cada modelo (array model_coefficients). Abaixo, utilizamos
-    // operações de modelagem, definição da câmera, e projeção, para computar
-    // as coordenadas finais em NDC (variável gl_Position). Após a execução
-    // deste Vertex Shader, a placa de vídeo (GPU) fará a divisão por W. Veja
+    // operaï¿½ï¿½es de modelagem, definiï¿½ï¿½o da cï¿½mera, e projeï¿½ï¿½o, para computar
+    // as coordenadas finais em NDC (variï¿½vel gl_Position). Apï¿½s a execuï¿½ï¿½o
+    // deste Vertex Shader, a placa de vï¿½deo (GPU) farï¿½ a divisï¿½o por W. Veja
     // slides 41-67 e 69-86 do documento Aula_09_Projecoes.pdf.
 
     gl_Position = projection * view * model * model_coefficients;
 
-    // Como as variáveis acima  (tipo vec4) são vetores com 4 coeficientes,
-    // também é possível acessar e modificar cada coeficiente de maneira
-    // independente. Esses são indexados pelos nomes x, y, z, e w (nessa
-    // ordem, isto é, 'x' é o primeiro coeficiente, 'y' é o segundo, ...):
+    // Como as variï¿½veis acima  (tipo vec4) sï¿½o vetores com 4 coeficientes,
+    // tambï¿½m ï¿½ possï¿½vel acessar e modificar cada coeficiente de maneira
+    // independente. Esses sï¿½o indexados pelos nomes x, y, z, e w (nessa
+    // ordem, isto ï¿½, 'x' ï¿½ o primeiro coeficiente, 'y' ï¿½ o segundo, ...):
     //
     //     gl_Position.x = model_coefficients.x;
     //     gl_Position.y = model_coefficients.y;
@@ -47,21 +51,106 @@ void main()
     //     gl_Position.w = model_coefficients.w;
     //
 
-    // Agora definimos outros atributos dos vértices que serão interpolados pelo
-    // rasterizador para gerar atributos únicos para cada fragmento gerado.
+    // Agora definimos outros atributos dos vï¿½rtices que serï¿½o interpolados pelo
+    // rasterizador para gerar atributos ï¿½nicos para cada fragmento gerado.
 
-    // Posição do vértice atual no sistema de coordenadas global (World).
+    // Posiï¿½ï¿½o do vï¿½rtice atual no sistema de coordenadas global (World).
     position_world = model * model_coefficients;
 
-    // Posição do vértice atual no sistema de coordenadas local do modelo.
+    // Posiï¿½ï¿½o do vï¿½rtice atual no sistema de coordenadas local do modelo.
     position_model = model_coefficients;
 
-    // Normal do vértice atual no sistema de coordenadas global (World).
+    // Normal do vï¿½rtice atual no sistema de coordenadas global (World).
     // Veja slides 123-151 do documento Aula_07_Transformacoes_Geometricas_3D.pdf.
     normal = inverse(transpose(model)) * normal_coefficients;
     normal.w = 0.0;
 
     // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
     texcoords = texture_coefficients;
+    
+    if (object_id == MOTO1) {
+
+        // Obtemos a posiÃ§Ã£o da cÃ¢mera utilizando a inversa da matriz que define o
+        // sistema de coordenadas da cÃ¢mera.
+        vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
+        vec4 camera_position = inverse(view) * origin;
+
+        // O fragmento atual Ã© coberto por um ponto que percente Ã  superfÃ­cie de um
+        // dos objetos virtuais da cena. Este ponto, p, possui uma posiÃ§Ã£o no
+        // sistema de coordenadas global (World coordinates). Esta posiÃ§Ã£o Ã© obtida
+        // atravÃ©s da interpolaÃ§Ã£o, feita pelo rasterizador, da posiÃ§Ã£o de cada
+        // vÃ©rtice.
+        vec4 p = position_world;
+
+        // Normal do fragmento atual, interpolada pelo rasterizador a partir das
+        // normais de cada vÃ©rtice.
+        vec4 n = normalize(normal);
+
+        // Vetor que define o sentido da fonte de luz em relaÃ§Ã£o ao ponto atual.
+        vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
+
+        // Vetor que define o sentido da cÃ¢mera em relaÃ§Ã£o ao ponto atual.
+        vec4 v = normalize(camera_position - p);
+
+        // Vetor que define o sentido da reflexÃ£o especular ideal.
+        vec4 r = -l + 2*n*(dot(n,l)); // PREENCHA AQUI o vetor de reflexÃ£o especular ideal
+
+        // half-vector
+        vec4 h = normalize(v+l);
+
+        // Coordenadas de textura U e V
+        float U = 0.0;
+        float V = 0.0;
+                // Coordenadas de textura do plano, obtidas do arquivo OBJ.
+        U = texcoords.x;
+        V = texcoords.y;
+
+
+        // ParÃ¢metros que definem as propriedades espectrais da superfÃ­cie
+        vec3 Kd = vec3(0.16,0.16,0.16); // RefletÃ¢ncia difusa
+        vec3 Ks = vec3(0.16,0.32,0.5); // RefletÃ¢ncia especular
+        vec3 Ka = vec3(0.32,0.16,0.16); // RefletÃ¢ncia ambiente
+        float q = 16.0; // Expoente especular para o modelo de iluminaÃ§Ã£o de Phong
+        
+        // Espectro da fonte de iluminaÃ§Ã£o
+        vec3 I = vec3(1.0,1.0,1.0); // PREENCHA AQUI o espectro da fonte de luz
+
+        // Espectro da luz ambiente
+        vec3 Ia = vec3(0.2,0.2,0.2); // PREENCHA AQUI o espectro da luz ambiente
+
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd*I*max(0, dot(n,l)); // PREENCHA AQUI o termo difuso de Lambert
+
+        // Termo ambiente
+        vec3 ambient_term = Ka*Ia; // PREENCHA AQUI o termo ambiente
+
+        // Termo especular utilizando o modelo de iluminaÃ§Ã£o de Phong
+        vec3 phong_specular_term  = Ks*I*pow(max(0, dot(n,h)), q); // PREENCHA AQUI o termo especular de Phong
+
+        
+        // Cor final do fragmento calculada com uma combinaÃ§Ã£o dos termos difuso,
+        // especular, e ambiente. Veja slide 129 do documento Aula_17_e_18_Modelos_de_Iluminacao.pdf.
+        cor_v.rgb = lambert_diffuse_term + ambient_term + phong_specular_term;   
+    }
+    // Obtemos a refletÃ¢ncia difusa a partir da leitura da imagem TextureImage0
+    
+
+    // NOTE: Se vocÃª quiser fazer o rendering de objetos transparentes, Ã©
+    // necessÃ¡rio:
+    // 1) Habilitar a operaÃ§Ã£o de "blending" de OpenGL logo antes de realizar o
+    //    desenho dos objetos transparentes, com os comandos abaixo no cÃ³digo C++:
+    //      glEnable(GL_BLEND);
+    //      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // 2) Realizar o desenho de todos objetos transparentes *apÃ³s* ter desenhado
+    //    todos os objetos opacos; e
+    // 3) Realizar o desenho de objetos transparentes ordenados de acordo com
+    //    suas distÃ¢ncias para a cÃ¢mera (desenhando primeiro objetos
+    //    transparentes que estÃ£o mais longe da cÃ¢mera).
+    // Alpha default = 1 = 100% opaco = 0% transparente
+    cor_v.a = 1;
+
+    // Cor final com correÃ§Ã£o gamma, considerando monitor sRGB.
+    // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas
+    cor_v.rgb = pow(cor_v.rgb, vec3(1.0,1.0,1.0)/2.2);
 }
 
