@@ -153,13 +153,15 @@ void main()
         V = (position_model.y - miny)/(maxy - miny);
 
         vec3 Kd0 = texture(TextureImage1, vec2(U,V)).rgb;
-   
+        float q; // Expoente especular para o modelo de iluminação de Phong
 
-        // Equação de Iluminação
-        float lambert = max(0,dot(n,l0));
+        // Espectro da fonte de iluminação
+        vec3 I = vec3(1.0,1.0,1.0); // PREENCHA AQUI o espectro da fonte de luz
+
+         // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term = Kd0*I*max(0, dot(n,l0)); // PREENCHA AQUI o termo difuso de Lambert
        
-
-        color.rgb = Kd0 * (lambert + 0.01);
+        color.rgb = lambert_diffuse_term;
 
     }else if ( object_id == WALL ){
 
