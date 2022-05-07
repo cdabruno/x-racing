@@ -107,6 +107,7 @@ void TextRendering_PrintMatrixVectorProduct(GLFWwindow* window, glm::mat4 M, glm
 void TextRendering_PrintMatrixVectorProductMoreDigits(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
 void TextRendering_PrintMatrixVectorProductDivW(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
 void TextRendering_GameOver(GLFWwindow* window);
+void TextRendering_Win(GLFWwindow* window, float tempo);
 
 // Funções abaixo renderizam como texto na janela OpenGL algumas matrizes e
 // outras informações do programa. Definidas após main().
@@ -186,6 +187,11 @@ glm::vec3 velMoto = glm::vec3(0.0f,0.0f,1.0f);
 glm::vec3 rotationAnglesMoto = glm::vec3(0.0f,0.0f,0.0f);
 float gravity = 0.001f;
 float oldTimeGravity = (float)glfwGetTime();
+bool checkpoint1 = false;
+bool checkpoint2 = false;
+bool checkpoint3 = false;
+float tempo_atual = 0;
+float moto_scale_y = 1;
 
 // Variáveis que controlam rotação do antebraço
 float g_ForearmAngleZ = 0.0f;
@@ -207,6 +213,7 @@ bool g_A_state = false;
 bool g_S_state = false;
 bool g_D_state = false;
 bool g_Enter_state = false;
+bool g_J_state = false;
 // Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
 GLuint vertex_shader_id;
 GLuint fragment_shader_id;
@@ -357,9 +364,11 @@ int main(int argc, char* argv[])
     glm::mat4 the_model;
     glm::mat4 the_view;
 
-    float speed = 0.005f; // Velocidade da câmera
+    float speed = 0.05f; // Velocidade da câmera
     float oldTime = (float)glfwGetTime();
     int lives = 3;
+    bool venceu = false;
+    float tempo_que_comecou = (float)glfwGetTime();
 
     float oldTimeBezier = (float)glfwGetTime();
 
@@ -429,8 +438,13 @@ int main(int argc, char* argv[])
         float currentCameraTime = (float)glfwGetTime();
         float deltaTCamera = currentCameraTime - oldTime;   
 
-        if (lives == 0 && g_Enter_state){
+        if ((lives == 0 || venceu == true) && g_Enter_state){
             lives = 3;
+            venceu = false;
+            checkpoint1 = false;
+            checkpoint2 = false;
+            checkpoint3 = false;
+            tempo_que_comecou = (float)glfwGetTime();
             deltaTCamera = 0;
             posMoto = glm::vec4(15.0f,-1.1f, 10.0f, 1.0f);;
             velMoto = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -442,25 +456,25 @@ int main(int argc, char* argv[])
             camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
             g_Enter_state = false;
         }
-    
+
 
         if (lives > 0){
             if (g_W_state){
-                g_move = camera_view_vector * speed * deltaTCamera;
+                g_move += 0.01f*(camera_view_vector * speed * deltaTCamera);
                 if(g_move.x > 0){
-                    g_move.x = glm::min(g_move.x, 0.06f);
+                    g_move.x = glm::min(g_move.x, 0.05f);
                 }else{
-                    g_move.x = glm::max(g_move.x, -0.06f);
+                    g_move.x = glm::max(g_move.x, -0.05f);
                 }
                 if(g_move.y > 0){
-                    g_move.y = glm::min(g_move.y, 0.06f);
+                    g_move.y = glm::min(g_move.y, 0.05f);
                 }else{
-                    g_move.y = glm::max(g_move.y, -0.06f);
+                    g_move.y = glm::max(g_move.y, -0.05f);
                 }
                 if(g_move.z > 0){
-                    g_move.z = glm::min(g_move.z, 0.06f);
+                    g_move.z = glm::min(g_move.z, 0.05f);
                 }else{
-                    g_move.z = glm::max(g_move.z, -0.06f);
+                    g_move.z = glm::max(g_move.z, -0.05f);
                 }
                 
                 g_move.y = 0;
@@ -472,10 +486,26 @@ int main(int argc, char* argv[])
             // S
             if (g_S_state)
             {
-                g_move = -camera_view_vector * speed * deltaTCamera;
+                g_move -= 0.01f*(camera_view_vector * speed * deltaTCamera);
+                if(g_move.x > 0){
+                    g_move.x = glm::min(g_move.x, 0.02f);
+                }else{
+                    g_move.x = glm::max(g_move.x, -0.02f);
+                }
+                if(g_move.y > 0){
+                    g_move.y = glm::min(g_move.y, 0.02f);
+                }else{
+                    g_move.y = glm::max(g_move.y, -0.02f);
+                }
+                if(g_move.z > 0){
+                    g_move.z = glm::min(g_move.z, 0.02f);
+                }else{
+                    g_move.z = glm::max(g_move.z, -0.02f);
+                }
                 g_move.y = 0;
 
             }
+
 
             // Gravidade
             float currentTimeGravity = (float)glfwGetTime();
@@ -498,6 +528,13 @@ int main(int argc, char* argv[])
             camera_view_vector = glm::vec4(-x,-y,-z,0.0f); // Vetor "view", sentido para onde a câmera está virada
             camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
         }else{
+            // look at
+            camera_position_c  = glm::vec4(x, y + 30.0f, z + 0.0f, 1.0f); // Ponto "c", centro da câmera
+            camera_lookat_l    = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
+            camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
+            camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+        }
+        if (venceu){
             // look at
             camera_position_c  = glm::vec4(x, y + 30.0f, z + 0.0f, 1.0f); // Ponto "c", centro da câmera
             camera_lookat_l    = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
@@ -557,15 +594,22 @@ int main(int argc, char* argv[])
         }
 
         // Desenhamos o modelo da moto
+        
         model = Matrix_Translate(posMoto.x,posMoto.y,posMoto.z)
-                * Matrix_Rotate_X(0.0f)
+                * Matrix_Scale(0.2f, 0.2f, 0.2f)
+                * Matrix_Rotate_Y(g_CameraTheta);
+                
+        PushMatrix(model);
+            model = Matrix_Translate(posMoto.x, posMoto.y, posMoto.z)
+                * Matrix_Scale(0.2f, 0.2f, 0.2f)
                 * Matrix_Rotate_Y(g_CameraTheta)
-                * Matrix_Rotate_Z(0.0f)
-                * Matrix_Scale(0.2f, 0.2f, 0.2f);
-        glm::mat4 model_moto = model;
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, MOTO);
-        DrawVirtualObject("moto");
+                * Matrix_Translate(0.0f, 0.0f, 0.0f);
+                
+            glm::mat4 model_moto = model;
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, MOTO);
+            DrawVirtualObject("moto");
+        PopMatrix(model);
 
         // Desenhamos o plano do chão
         model = Matrix_Translate(0.0f,-1.1f,0.0f)
@@ -738,6 +782,78 @@ int main(int argc, char* argv[])
                                                     1.0f));
         if (colidiu_esfera){
             sign1 = -sign1;
+            sphere_time1 = 5 - sphere_time1;
+            oldTimeBezier = (float)glfwGetTime() - (5 - currentBezier);
+            currentBezier = 0.01f;
+        }
+
+        if (!checkpoint1){
+
+            model = Matrix_Translate(15.0f, -1.1f, -10.0f)
+                    * Matrix_Scale(0.5f, 0.2f, 0.5f);
+            glm::mat4 model_sphere3 = model;        
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, SPHERE);
+            DrawVirtualObject("sphere");
+
+            checkpoint1 = checkpoint1 || collisionBetweenCubeSphere(model_moto * glm::vec4(g_VirtualScene["moto"].bbox_min.x,
+                                                                    g_VirtualScene["moto"].bbox_min.y,
+                                                                    g_VirtualScene["moto"].bbox_min.z, 1.0f),
+                                                                    model_moto * glm::vec4(g_VirtualScene["moto"].bbox_max.x,
+                                                                    g_VirtualScene["moto"].bbox_max.y,
+                                                                    g_VirtualScene["moto"].bbox_max.z, 1.0f),
+                                                                    model_sphere3 * glm::vec4(g_VirtualScene["sphere"].bbox_min.x,
+                                                                    g_VirtualScene["sphere"].bbox_min.y,
+                                                                    g_VirtualScene["sphere"].bbox_min.z, 1.0f),
+                                                                    model_sphere3 * glm::vec4(g_VirtualScene["sphere"].bbox_max.x,
+                                                                    g_VirtualScene["sphere"].bbox_max.y,
+                                                                    g_VirtualScene["sphere"].bbox_max.z,
+                                                                    1.0f));
+        }
+
+        if (!checkpoint2){
+            model = Matrix_Translate(-15.0f, -1.1f, -9.0f)
+                    * Matrix_Scale(0.5f, 0.2f, 0.5f);
+            glm::mat4 model_sphere4 = model;  
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, SPHERE);
+            DrawVirtualObject("sphere");
+
+            checkpoint2 = checkpoint2 || collisionBetweenCubeSphere(model_moto * glm::vec4(g_VirtualScene["moto"].bbox_min.x,
+                                                                    g_VirtualScene["moto"].bbox_min.y,
+                                                                    g_VirtualScene["moto"].bbox_min.z, 1.0f),
+                                                                    model_moto * glm::vec4(g_VirtualScene["moto"].bbox_max.x,
+                                                                    g_VirtualScene["moto"].bbox_max.y,
+                                                                    g_VirtualScene["moto"].bbox_max.z, 1.0f),
+                                                                    model_sphere4 * glm::vec4(g_VirtualScene["sphere"].bbox_min.x,
+                                                                    g_VirtualScene["sphere"].bbox_min.y,
+                                                                    g_VirtualScene["sphere"].bbox_min.z, 1.0f),
+                                                                    model_sphere4 * glm::vec4(g_VirtualScene["sphere"].bbox_max.x,
+                                                                    g_VirtualScene["sphere"].bbox_max.y,
+                                                                    g_VirtualScene["sphere"].bbox_max.z,
+                                                                    1.0f));
+        }
+        if (!checkpoint3){
+            model = Matrix_Translate(-14.0f, -1.1f, 4.0f)
+                    * Matrix_Scale(0.5f, 0.2f, 0.5f);
+            glm::mat4 model_sphere5 = model;  
+            glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(object_id_uniform, SPHERE);
+            DrawVirtualObject("sphere");
+
+            checkpoint3 = checkpoint3 || collisionBetweenCubeSphere(model_moto * glm::vec4(g_VirtualScene["moto"].bbox_min.x,
+                                                                    g_VirtualScene["moto"].bbox_min.y,
+                                                                    g_VirtualScene["moto"].bbox_min.z, 1.0f),
+                                                                    model_moto * glm::vec4(g_VirtualScene["moto"].bbox_max.x,
+                                                                    g_VirtualScene["moto"].bbox_max.y,
+                                                                    g_VirtualScene["moto"].bbox_max.z, 1.0f),
+                                                                    model_sphere5 * glm::vec4(g_VirtualScene["sphere"].bbox_min.x,
+                                                                    g_VirtualScene["sphere"].bbox_min.y,
+                                                                    g_VirtualScene["sphere"].bbox_min.z, 1.0f),
+                                                                    model_sphere5 * glm::vec4(g_VirtualScene["sphere"].bbox_max.x,
+                                                                    g_VirtualScene["sphere"].bbox_max.y,
+                                                                    g_VirtualScene["sphere"].bbox_max.z,
+                                                                    1.0f));
         }
 
         bezier_value = calculateBezier(5.0, sphere_time1 + currentBezier*sign1, moto_pos1[0],moto_pos1[1],moto_pos1[2],moto_pos1[3]);
@@ -745,7 +861,7 @@ int main(int argc, char* argv[])
                 * Matrix_Rotate_X(0.0f)
                 * Matrix_Rotate_Y(g_CameraTheta)
                 * Matrix_Rotate_Z(0.0f)
-                * Matrix_Scale(0.4f, 0.4f, 0.4f);
+                * Matrix_Scale(0.4f, moto_scale_y*0.4f, 0.4f);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, MOTO1);
         DrawVirtualObject("moto");
@@ -755,7 +871,7 @@ int main(int argc, char* argv[])
                 * Matrix_Rotate_X(0.0f)
                 * Matrix_Rotate_Y(g_CameraTheta)
                 * Matrix_Rotate_Z(0.0f)
-                * Matrix_Scale(0.4f, 0.4f, 0.4f);
+                * Matrix_Scale(0.4f, moto_scale_y*0.4f, 0.4f);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, MOTO1);
         DrawVirtualObject("moto");
@@ -765,17 +881,7 @@ int main(int argc, char* argv[])
                 * Matrix_Rotate_X(0.0f)
                 * Matrix_Rotate_Y(g_CameraTheta)
                 * Matrix_Rotate_Z(0.0f)
-                * Matrix_Scale(0.4f, 0.4f, 0.4f);
-        glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(object_id_uniform, MOTO1);
-        DrawVirtualObject("moto");
-
-        bezier_value = calculateBezier(5.0, sphere_time1 + currentBezier*sign1, moto_pos4[0],moto_pos4[1],moto_pos4[2],moto_pos4[3]);
-        model = Matrix_Translate(bezier_value.x,bezier_value.y,bezier_value.z)
-                * Matrix_Rotate_X(0.0f)
-                * Matrix_Rotate_Y(g_CameraTheta)
-                * Matrix_Rotate_Z(0.0f)
-                * Matrix_Scale(0.4f, 0.4f, 0.4f);
+                * Matrix_Scale(0.4f, moto_scale_y*0.4f, 0.4f);
         glUniformMatrix4fv(model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(object_id_uniform, MOTO1);
         DrawVirtualObject("moto");
@@ -811,6 +917,13 @@ int main(int argc, char* argv[])
 
         if (lives == 0){
             TextRendering_GameOver(window);
+        }
+        if (checkpoint1 && checkpoint2 && checkpoint3){
+            if (venceu == false){
+                tempo_atual = (float)glfwGetTime();
+            }
+            venceu = true;
+            TextRendering_Win(window, tempo_atual - tempo_que_comecou);     
         }
 
         // O framebuffer onde OpenGL executa as operações de renderização não
@@ -1558,10 +1671,18 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     {
         g_D_state = (action == GLFW_PRESS)? true: ((action == GLFW_RELEASE)? false: g_D_state);
     }
-    // M
-    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS)
+    // Enter
+    if (key == GLFW_KEY_ENTER)
     {   
         g_Enter_state = (action == GLFW_PRESS)? true: ((action == GLFW_RELEASE)? false: g_Enter_state);
+    }
+    // J
+    if (key == GLFW_KEY_J && action == GLFW_PRESS)
+    {   
+        moto_scale_y = moto_scale_y + 1;
+        if (moto_scale_y > 3){
+            moto_scale_y = 1;
+        }
     }
     
 
@@ -1764,6 +1885,19 @@ void TextRendering_GameOver(GLFWwindow* window)
     float lineheight = TextRendering_LineHeight(window);
     float charwidth = TextRendering_CharWidth(window);
     TextRendering_PrintString(window, buffer, 0.0f, 0.0f-lineheight, 1.0f);
+}
+
+// Win over
+void TextRendering_Win(GLFWwindow* window, float tempo)
+{   
+    static char  buffer[30] = "GANHOU !!! - Tempo: ?";
+    static int  numchars_tempo = 26;
+
+    numchars_tempo = snprintf(buffer, 30, "GANHOU !!! - Tempo: %.2f s", tempo);
+
+    float lineheight = TextRendering_LineHeight(window);
+    float charwidth = TextRendering_CharWidth(window);
+    TextRendering_PrintString(window, buffer, -0.0f, 0.0f-lineheight, 1.0f);
 }
 
 // Função para debugging: imprime no terminal todas informações de um modelo
